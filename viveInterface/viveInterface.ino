@@ -1,5 +1,5 @@
 enum EventID {RELEASE = 0, DRAW_BOW = 1, PULL_BOW = 2, DRAW_SWORD = 3, DRAW_QUIVER = 4, NULL_EVENT = 5};
-enum OutputType {SINGLE_PULSE, DOUBLE_PULSE, LONG_PULSE};
+enum OutputType {SINGLE_PULSE, DOUBLE_PULSE, LONG_PULSE, CONTINUOUS};
 
 struct EventType {
   EventID eventId;
@@ -22,7 +22,7 @@ const unsigned int longPulseLength = 1000;  // Ms
 EventType events[] = {
   {RELEASE, DOUBLE_PULSE, SwordOutPin, 0},
   {DRAW_BOW, SINGLE_PULSE, BowOutPin,  2000},
-  {PULL_BOW, DOUBLE_PULSE, BowOutPin, 3900},
+  {PULL_BOW, CONTINUOUS, BowOutPin, 3900},
   {DRAW_SWORD, SINGLE_PULSE, SwordOutPin, 7000},
   {DRAW_QUIVER, LONG_PULSE, BowOutPin, 10000}
 };
@@ -52,6 +52,8 @@ void sendEvent(const EventType& event) {
     sendPulse(shortPulseLength, event.outputPin);
   } else if (event.outputType == LONG_PULSE) {
     sendPulse(longPulseLength, event.outputPin);
+  } else if (event.outputType == CONTINUOUS) {
+    digitalWrite(event.outputPin, HIGH);
   }
 }
 
@@ -93,6 +95,7 @@ void setup() {
 // Active Globals
 unsigned int sequentialEventCount = 0;
 EventID currentState = NULL_EVENT;
+EventID prevState = NULL_EVENT;
 
 void loop() {
   // put your main code here, to run repeatedly:
@@ -113,7 +116,17 @@ void loop() {
   // Look for two consequetive reads of the same event
   // before taking action
   if(sequentialEventCount == requiredReadings - 1 && currentState != NULL_EVENT) {
-    sendEvent(events[currentState]); 
+
+    // Stop continous before sending another pulse
+    if(events[prevState].outputType == CONTINUOUS) {
+      digitalWrite(events[prevState].outputPin, LOW);
+      delay(shortPulseLength);
+    }
+
+    bool skipSendRelease = (currentState == RELEASE) &&
+      ((prevState == PULL_BOW) || (prevState == DRAW_QUIVER));
+
+      sendEvent(events[currentState]); 
     /*
     Serial.print("Sending State: ");
     printEvent(currentState);
